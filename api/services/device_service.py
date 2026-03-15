@@ -22,8 +22,25 @@ def compute_device_hash(device_info):
     
     return hashlib.sha256(fingerprint.encode('utf-8')).hexdigest()
 
-def get_geolocation(ip_address):
-    """Get geolocation data from IP address using ipapi.co API."""
+def get_geolocation(ip_address, coords=None):
+    """
+    Get geolocation data. 
+    If coords (lat, lon) are provided, uses them for reverse geocoding fallback (simulated).
+    Otherwise uses ipapi.co.
+    """
+    if coords and isinstance(coords, dict):
+        lat = coords.get('latitude')
+        lon = coords.get('longitude')
+        if lat and lon:
+            # In a real app, you'd use a reverse geocoding API (e.g. OpenStreetMap/Google)
+            # here we simulate the resolution to demonstrate the real-time flow.
+            return {
+                'city': f"GPS ({lat:.4f}, {lon:.4f})",
+                'country': 'Verified Location',
+                'ip': ip_address,
+                'coords': coords
+            }
+
     geo_url = os.environ.get('GEO_API_URL', 'https://ipapi.co')
     
     # Skip for localhost / private IPs

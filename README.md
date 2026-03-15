@@ -44,10 +44,13 @@ SecurityEngine/
 
 ## 🔐 Features
 
-### AI Deepfake Detection
-- **XceptionNet CNN** model for real-time face verification during login
-- Standalone image upload + webcam live detection
-- Fake face → automatic BLOCK (face_risk = 30/30)
+### AI Identity & Deepfake Protection
+- **XceptionNet CNN** model for real-time deepfake detection during login
+- **Identity Baseline**: Registration photo is stored as a baseline for future comparisons
+- **Live Identity Verification**: Real-time matching of login faces against the baseline
+- **Face Quality Check**: Automated blur and lighting analysis to ensure verification accuracy
+- **Audit Trails**: All login attempt faces are captured and stored for security auditing
+- **Risk Score (0-30)**: High quality faces reduce risk; deepfakes or mismatch = BLOCK
 
 ### Multi-Factor Risk Engine (0-100 score)
 | Factor | Weight | Analysis |

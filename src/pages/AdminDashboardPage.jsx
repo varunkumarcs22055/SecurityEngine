@@ -8,6 +8,7 @@ export default function AdminDashboardPage({ token }) {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const [statusFilter, setStatusFilter] = useState('');
+    const [selectedUserJson, setSelectedUserJson] = useState(null);
 
     useEffect(() => { fetchData(); }, []);
 
@@ -256,14 +257,22 @@ export default function AdminDashboardPage({ token }) {
                                             </td>
                                             <td>{formatTime(user.created_at)}</td>
                                             <td>
-                                                {user.role !== 'admin' && (
-                                                    <button
-                                                        className={`btn-sm ${user.is_blocked ? 'btn-unblock' : 'btn-block'}`}
-                                                        onClick={() => handleBlockUser(user.id)}
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button 
+                                                        className="btn-sm btn-outline"
+                                                        onClick={() => setSelectedUserJson(user)}
                                                     >
-                                                        {user.is_blocked ? 'Unblock' : 'Block'}
+                                                        💎 View JSON
                                                     </button>
-                                                )}
+                                                    {user.role !== 'admin' && (
+                                                        <button
+                                                            className={`btn-sm ${user.is_blocked ? 'btn-unblock' : 'btn-block'}`}
+                                                            onClick={() => handleBlockUser(user.id)}
+                                                        >
+                                                            {user.is_blocked ? 'Unblock' : 'Block'}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -272,6 +281,45 @@ export default function AdminDashboardPage({ token }) {
                         ) : (
                             <div className="empty-state"><div className="empty-state-icon">👥</div><p>No users registered yet</p></div>
                         )}
+                    </div>
+                </div>
+            )}
+            {/* JSON Modal */}
+            {selectedUserJson && (
+                <div className="otp-modal-overlay" onClick={() => setSelectedUserJson(null)}>
+                    <div className="otp-modal" style={{ maxWidth: '600px', width: '90%' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                            <h3>💎 Unique Face Signature (JSON)</h3>
+                            <button className="btn-close" style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer' }} onClick={() => setSelectedUserJson(null)}>✕</button>
+                        </div>
+                        <p style={{ fontSize: '0.9rem', color: '#cbd5e1', marginBottom: '15px' }}>
+                            Encrypted biometric attributes for <strong>{selectedUserJson.email}</strong>. 
+                            Only this unique signature allows secure login.
+                        </p>
+                        <pre style={{ 
+                            background: '#1e293b', 
+                            color: '#e2e8f0', 
+                            padding: '15px', 
+                            borderRadius: '8px', 
+                            overflowX: 'auto',
+                            fontSize: '0.85rem',
+                            textAlign: 'left',
+                            maxHeight: '300px'
+                        }}>
+                            {JSON.stringify(selectedUserJson.face_attributes, null, 2)}
+                        </pre>
+                        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button className="btn btn-primary" onClick={() => {
+                                const blob = new Blob([JSON.stringify(selectedUserJson.face_attributes, null, 2)], { type: 'application/json' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `face_signature_${selectedUserJson.id}.json`;
+                                a.click();
+                            }}>
+                                📥 Download JSON
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

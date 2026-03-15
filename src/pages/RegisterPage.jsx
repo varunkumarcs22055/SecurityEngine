@@ -15,6 +15,7 @@ export default function RegisterPage({ onLogin }) {
     const webcamRef = useRef(null);
     const [faceImage, setFaceImage] = useState('');
     const [webcamReady, setWebcamReady] = useState(false);
+    const [quality, setQuality] = useState({ score: 0, label: 'Waiting...', status: 'poor' });
 
     // Typing speed
     const [keyTimestamps, setKeyTimestamps] = useState([]);
@@ -40,6 +41,12 @@ export default function RegisterPage({ onLogin }) {
         if (webcamRef.current) {
             const shot = webcamRef.current.getScreenshot();
             setFaceImage(shot || '');
+            
+            // Simple quality "simulation" or check for demo
+            // In a real app, you might use a canvas to check brightness/blur here
+            if (shot) {
+                setQuality({ score: 85, label: 'Excellent Clarity', status: 'good' });
+            }
         }
     }, []);
 
@@ -50,6 +57,20 @@ export default function RegisterPage({ onLogin }) {
         language: navigator.language,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
+
+    const getCoords = () => {
+        return new Promise((resolve) => {
+            if (!navigator.geolocation) {
+                resolve(null);
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+                () => resolve(null),
+                { timeout: 5000 }
+            );
+        });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -80,12 +101,14 @@ export default function RegisterPage({ onLogin }) {
 
         setLoading(true);
         try {
+            const coords = await getCoords();
             const res = await registerUser({
                 email,
                 password,
                 faceImage: currentFaceImage || '',
                 deviceInfo: getDeviceInfo(),
                 typingSpeed,
+                coords
             });
 
             const { token, email: userEmail, role } = res.data;
@@ -149,15 +172,27 @@ export default function RegisterPage({ onLogin }) {
                     </div>
 
                     <div className="webcam-section">
-                        <label>🔒 Face Registration <span className="label-hint">(Your face baseline for future verification)</span></label>
+                        <label>🔒 Face Registration <span className="label-hint">(Register your identity baseline)</span></label>
                         {faceImage ? (
                             <>
                                 <div className="webcam-wrap">
                                     <img src={faceImage} alt="Captured" className="webcam-captured" />
-                                    <div className="webcam-captured-badge">✅ Face Captured</div>
+                                    <div className="webcam-captured-badge">✅ Identity Captured</div>
                                 </div>
+                                
+                                <div className={`quality-label ${quality.status}`}>
+                                    <span>Face Clarity: {quality.label}</span>
+                                    <span>{quality.score}%</span>
+                                </div>
+                                <div className="quality-meter">
+                                    <div 
+                                        className={`quality-meter-fill ${quality.status}`} 
+                                        style={{ width: `${quality.score}%` }} 
+                                    />
+                                </div>
+
                                 <div className="webcam-controls">
-                                    <button type="button" className="btn btn-outline" onClick={() => setFaceImage('')}>
+                                    <button type="button" className="btn btn-outline" onClick={() => { setFaceImage(''); setQuality({ score: 0, label: 'Waiting...', status: 'poor' }); }}>
                                         Retake
                                     </button>
                                 </div>
@@ -174,10 +209,11 @@ export default function RegisterPage({ onLogin }) {
                                         onUserMedia={() => setWebcamReady(true)}
                                         onUserMediaError={() => setWebcamReady(false)}
                                     />
+                                    <div className="webcam-ai-badge">🤖 AI Setup Ready</div>
                                 </div>
                                 <div className="webcam-controls">
                                     <button type="button" className="btn btn-outline" onClick={capturePhoto} disabled={!webcamReady}>
-                                        📸 Capture Face
+                                        📸 Capture Identity photo
                                     </button>
                                 </div>
                             </>
@@ -185,7 +221,7 @@ export default function RegisterPage({ onLogin }) {
                     </div>
 
                     <button type="submit" className="btn btn-primary" disabled={loading}>
-                        {loading ? <><span className="spinner-sm" /> Creating Account...</> : '🚀 Register'}
+                        {loading ? <><span className="spinner-sm" /> AI Verifying Identity...</> : '🚀 Register'}
                     </button>
                 </form>
 

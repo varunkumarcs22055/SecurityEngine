@@ -26,8 +26,8 @@ def generate_token(user_id, email, role='user'):
     }
     return jwt.encode(payload, secret, algorithm='HS256')
 
-def register_user(email, password, device_info, location, typing_speed, face_data):
-    """Register a new user with all baseline data. Always role='user'."""
+def register_user(email, password, device_info, location, typing_speed, face_image_b64):
+    """Register a new user with all baseline data. Saves face image to disk."""
     conn = get_connection()
     cur = conn.cursor()
     
@@ -39,10 +39,50 @@ def register_user(email, password, device_info, location, typing_speed, face_dat
         
         password_hash = hash_password(password)
         
+        # Save face image to disk if provided
+        face_path = ''
+        face_embedding = ''
+        if face_image_b64:
+            try:
+                import base64
+                import uuid
+                from api.services.face_service import generate_face_embedding, get_face_attributes
+                
+                # Clean base64 and decode
+                header, encoded = face_image_b64.split(",", 1) if "," in face_image_b64 else ("", face_image_b64)
+                img_data = base64.b64decode(encoded)
+                
+                # Generate unique attributes JSON
+                face_attributes = get_face_attributes(img_data)
+                face_attributes_json = json.dumps(face_attributes)
+                
+                # ENFORCE AI VERIFICATION ON REGISTRATION
+                from api.services.face_service import analyze_face
+                face_analysis = analyze_face(face_image_b64)
+                if face_analysis.get('face_verdict') == 'FAKE':
+                    return None, f"Registration rejected: Biometric identity verification failed. AI/Deepfake signature detected (Confidence: {face_analysis.get('face_confidence', 0)*100:.1f}%)."
+                
+                filename = f"{uuid.uuid4()}.jpg"
+                upload_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'uploads', 'faces')
+                os.makedirs(upload_dir, exist_ok=True)
+                
+                face_path = os.path.join(upload_dir, filename)
+                with open(face_path, "wb") as f:
+                    f.write(img_data)
+                
+                # We store the RELATIVE path or just filename in the face_embedding column for now
+                # Or better, we use the face_embedding logic
+                face_embedding = generate_face_embedding(face_image_b64)
+                # Store the relative path for easy access
+                face_path_relative = f"api/static/uploads/faces/{filename}"
+            except Exception as e:
+                print(f"[AUTH] Failed to save register face: {e}")
+
         cur.execute("""
             INSERT INTO users (email, password_hash, role, registered_device, home_city, home_country, 
-                             avg_typing_speed, typing_variance, login_count, face_embedding, is_face_verified)
-            VALUES (?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, ?)
+                             avg_typing_speed, typing_variance, login_count, face_embedding, 
+                             face_attributes_json, is_face_verified)
+            VALUES (?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             email,
             password_hash,
@@ -52,8 +92,9 @@ def register_user(email, password, device_info, location, typing_speed, face_dat
             float(typing_speed) if typing_speed else 0.0,
             0.0,
             0,
-            face_data or '',
-            1 if face_data else 0
+            face_path_relative if face_path else face_embedding, 
+            face_attributes_json if 'face_attributes_json' in locals() else '{}',
+            1 if face_image_b64 else 0
         ))
         
         user_id = cur.lastrowid
@@ -64,8 +105,9 @@ def register_user(email, password, device_info, location, typing_speed, face_dat
         return {"user_id": user_id, "token": token, "email": email, "role": "user"}, None
         
     except Exception as e:
-        conn.rollback()
-        conn.close()
+        if conn:
+            conn.rollback()
+            conn.close()
         return None, str(e)
 
 def authenticate_user(email, password):
@@ -118,7 +160,7 @@ def authenticate_admin(email, password):
     user, error = authenticate_user(email, password)
     if error:
         return None, error
-    if user.get('role') != 'admin':
+    if not user or user.get('role') != 'admin':
         return None, "Access denied. Admin credentials required."
     return user, None
 

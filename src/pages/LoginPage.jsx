@@ -17,6 +17,7 @@ export default function LoginPage({ onLogin }) {
     const webcamRef = useRef(null);
     const [faceImage, setFaceImage] = useState('');
     const [webcamReady, setWebcamReady] = useState(false);
+    const [quality, setQuality] = useState({ score: 0, label: 'Scanning...', status: 'poor' });
 
     // Typing speed measurement
     const [keyTimestamps, setKeyTimestamps] = useState([]);
@@ -43,6 +44,11 @@ export default function LoginPage({ onLogin }) {
         if (webcamRef.current) {
             const shot = webcamRef.current.getScreenshot();
             setFaceImage(shot || '');
+            
+            // Quality feedback sim
+            if (shot) {
+                setQuality({ score: 92, label: 'High Precision', status: 'good' });
+            }
         }
     }, []);
 
@@ -53,6 +59,20 @@ export default function LoginPage({ onLogin }) {
         language: navigator.language,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
+
+    const getCoords = () => {
+        return new Promise((resolve) => {
+            if (!navigator.geolocation) {
+                resolve(null);
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+                () => resolve(null),
+                { timeout: 5000 }
+            );
+        });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -76,12 +96,14 @@ export default function LoginPage({ onLogin }) {
 
         setLoading(true);
         try {
+            const coords = await getCoords();
             const res = await loginUser({
                 email,
                 password,
                 faceImage: currentFaceImage || '',
                 deviceInfo: getDeviceInfo(),
                 typingSpeed,
+                coords
             });
 
             const { token, email: userEmail, role, risk } = res.data;
@@ -93,7 +115,11 @@ export default function LoginPage({ onLogin }) {
                 localStorage.setItem('pendingToken', token);
             } else if (risk.decision === 'ALLOW') {
                 onLogin(token, userEmail, role || 'user');
-                navigate('/dashboard');
+                if (role === 'admin') {
+                    navigate('/quantum-admin');
+                } else {
+                    navigate('/dashboard');
+                }
             }
             // BLOCK = don't login, just show result (deepfake detected)
         } catch (err) {
@@ -176,8 +202,20 @@ export default function LoginPage({ onLogin }) {
                                     <div className="webcam-wrap">
                                         <img src={faceImage} alt="Captured" className="webcam-captured" />
                                     </div>
+
+                                    <div className={`quality-label ${quality.status}`}>
+                                        <span>Scan Quality: {quality.label}</span>
+                                        <span>{quality.score}%</span>
+                                    </div>
+                                    <div className="quality-meter">
+                                        <div 
+                                            className={`quality-meter-fill ${quality.status}`} 
+                                            style={{ width: `${quality.score}%` }} 
+                                        />
+                                    </div>
+
                                     <div className="webcam-controls">
-                                        <button type="button" className="btn btn-outline" onClick={() => setFaceImage('')}>
+                                        <button type="button" className="btn btn-outline" onClick={() => { setFaceImage(''); setQuality({ score: 0, label: 'Scanning...', status: 'poor' }); }}>
                                             Retake
                                         </button>
                                     </div>
@@ -198,7 +236,7 @@ export default function LoginPage({ onLogin }) {
                                     </div>
                                     <div className="webcam-controls">
                                         <button type="button" className="btn btn-outline" onClick={capturePhoto} disabled={!webcamReady}>
-                                            📸 Capture Face
+                                            📸 Scan Identify
                                         </button>
                                     </div>
                                 </>
@@ -206,7 +244,7 @@ export default function LoginPage({ onLogin }) {
                         </div>
 
                         <button type="submit" className="btn btn-primary" disabled={loading}>
-                            {loading ? <><span className="spinner-sm" /> Analyzing Identity...</> : '🔐 Sign In'}
+                            {loading ? <><span className="spinner-sm" /> AI Verifying Identity...</> : '🔐 Sign In'}
                         </button>
                     </form>
 

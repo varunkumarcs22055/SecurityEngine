@@ -25,7 +25,10 @@ def compute_total_risk(device_result, behavior_result, face_result):
     total = round(total, 1)
     
     # Decision logic
-    if total <= Config.RISK_ALLOW_MAX:
+    if face_result.get('face_verdict') == 'FAKE':
+        decision = 'BLOCK'
+        total = 100.0
+    elif total <= Config.RISK_ALLOW_MAX:
         decision = 'ALLOW'
     elif total <= Config.RISK_FLAG_MAX:
         decision = 'FLAG'

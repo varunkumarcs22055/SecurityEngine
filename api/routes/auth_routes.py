@@ -1,4 +1,5 @@
 import json
+import os
 from flask import Blueprint, request, jsonify
 from api.services.auth_service import register_user, authenticate_user, authenticate_admin, generate_token, update_user_baseline
 from api.services.device_service import compute_device_hash, get_geolocation, compute_device_risk
@@ -29,13 +30,13 @@ def register():
             return jsonify({"error": "Password must be at least 6 characters"}), 400
         
         client_ip = get_client_ip()
-        location = get_geolocation(client_ip)
-        face_embedding = generate_face_embedding(face_image)
+        coords = data.get('coords') # {latitude, longitude}
+        location = get_geolocation(client_ip, coords)
         
         result, error = register_user(
             email=email, password=password, device_info=device_info,
             location=location, typing_speed=float(typing_speed) if typing_speed else 0.0,
-            face_data=face_embedding
+            face_image_b64=face_image
         )
         
         if error:
@@ -69,7 +70,8 @@ def login():
             return jsonify({"error": error}), 401
         
         client_ip = get_client_ip()
-        current_location = get_geolocation(client_ip)
+        coords = data.get('coords')
+        current_location = get_geolocation(client_ip, coords)
         
         current_device_hash = compute_device_hash(device_info)
         device_result = compute_device_risk(user, current_device_hash, current_location)
@@ -89,6 +91,23 @@ def login():
         if typing_speed:
             update_user_baseline(user['id'], float(typing_speed))
         
+        # Save login face attempt for audit
+        login_face_path = ''
+        if face_image:
+            try:
+                import base64, uuid
+                header, encoded = face_image.split(",", 1) if "," in face_image else ("", face_image)
+                img_data = base64.b64decode(encoded)
+                filename = f"login_{uuid.uuid4()}.jpg"
+                upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'api', 'static', 'uploads', 'login_attempts')
+                os.makedirs(upload_dir, exist_ok=True)
+                login_face_path = os.path.join(upload_dir, filename)
+                with open(login_face_path, "wb") as f:
+                    f.write(img_data)
+                login_face_path = f"api/static/uploads/login_attempts/{filename}"
+            except Exception as e:
+                print(f"[AUTH] Failed to save login face: {e}")
+
         log_login_attempt(
             user_id=user['id'], email=email, ip_address=client_ip,
             device_info=json.dumps(device_info),
@@ -97,7 +116,8 @@ def login():
             typing_speed=float(typing_speed) if typing_speed else 0.0,
             risk_result=risk_result,
             face_verdict=face_result.get('face_verdict', ''),
-            face_confidence=face_result.get('face_confidence', 0.0)
+            face_confidence=face_result.get('face_confidence', 0.0),
+            face_image_path=login_face_path
         )
         
         return jsonify({
@@ -186,7 +206,7 @@ def get_user_logs():
         return jsonify({"error": f"Failed to fetch logs: {str(e)}"}), 500
 
 
-def log_login_attempt(user_id, email, ip_address, device_info, city, country, typing_speed, risk_result, face_verdict='', face_confidence=0.0):
+def log_login_attempt(user_id, email, ip_address, device_info, city, country, typing_speed, risk_result, face_verdict='', face_confidence=0.0, face_image_path=''):
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -194,14 +214,14 @@ def log_login_attempt(user_id, email, ip_address, device_info, city, country, ty
             INSERT INTO login_logs 
             (user_id, email, ip_address, device_info, city, country, typing_speed,
              device_risk, location_risk, behavior_risk, face_risk, total_risk, decision,
-             face_verdict, face_confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             face_verdict, face_confidence, face_image_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             user_id, email, ip_address, device_info, city, country, typing_speed,
             risk_result['device_risk'], risk_result['location_risk'],
             risk_result['behavior_risk'], risk_result['face_risk'],
             risk_result['total_risk'], risk_result['decision'],
-            face_verdict, face_confidence
+            face_verdict, face_confidence, face_image_path
         ))
         conn.commit()
         conn.close()

@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+import json
 from api.utils.helpers import admin_required
 from api.database import get_connection
 
@@ -129,7 +130,7 @@ def get_users():
         cur = conn.cursor()
         cur.execute("""
             SELECT id, email, role, is_blocked, home_city, home_country, 
-                   login_count, is_face_verified, created_at
+                   login_count, is_face_verified, face_attributes_json, created_at
             FROM users ORDER BY created_at DESC
         """)
         rows = cur.fetchall()
@@ -140,6 +141,7 @@ def get_users():
             'is_blocked': bool(r['is_blocked']), 'home_city': r['home_city'],
             'home_country': r['home_country'], 'login_count': r['login_count'],
             'is_face_verified': bool(r['is_face_verified']),
+            'face_attributes': json.loads(r['face_attributes_json'] or '{}'),
             'created_at': r['created_at']
         } for r in rows]
         
