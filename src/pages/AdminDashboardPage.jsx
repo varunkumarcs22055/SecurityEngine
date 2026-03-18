@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getStats, getLoginLogs, getUsers, toggleBlockUser } from '../services/api';
+import { getStats, getLoginLogs, getUsers, toggleBlockUser, getUserById, deleteUser } from '../services/api';
 
 export default function AdminDashboardPage({ token }) {
     const [stats, setStats] = useState(null);
@@ -8,7 +8,9 @@ export default function AdminDashboardPage({ token }) {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const [statusFilter, setStatusFilter] = useState('');
-    const [selectedUserJson, setSelectedUserJson] = useState(null);
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [userLogs, setUserLogs] = useState(null);
+    const [userLogsLoading, setUserLogsLoading] = useState(false);
 
     useEffect(() => { fetchData(); }, []);
 
@@ -39,6 +41,31 @@ export default function AdminDashboardPage({ token }) {
         }
     };
 
+    const handleDeleteUser = async (user) => {
+        if (!window.confirm(`Are you sure you want to permanently delete user ${user.email}?\nThis will remove them and all their login logs from the database. This action cannot be undone.`)) return;
+        try {
+            await deleteUser(user.id);
+            fetchData();
+        } catch (err) {
+            console.error('Failed to delete user:', err);
+            alert(err.response?.data?.error || 'Failed to delete user');
+        }
+    };
+
+    const handleViewUserLogs = async (user) => {
+        setSelectedUser(user);
+        setUserLogs(null);
+        setUserLogsLoading(true);
+        try {
+            const res = await getUserById(user.id);
+            setUserLogs(res.data.logs || []);
+        } catch (err) {
+            setUserLogs([]);
+        } finally {
+            setUserLogsLoading(false);
+        }
+    };
+
     const filteredLogs = statusFilter
         ? logs.filter(l => l.decision === statusFilter)
         : logs;
@@ -58,12 +85,12 @@ export default function AdminDashboardPage({ token }) {
             <div className="admin-dash-header">
                 <div>
                     <h1>⚡ QuantumShield Command Center</h1>
-                    <p>Real-time security monitoring, deepfake detection analytics, and user management</p>
+                    <p>Real-time AI security monitoring, deepfake analytics, and user management</p>
                 </div>
                 <button className="btn btn-outline" onClick={fetchData}>🔄 Refresh</button>
             </div>
 
-            {/* Tab Navigation */}
+            {/* ── Tab Navigation ── */}
             <div className="admin-tabs">
                 {['overview', 'logs', 'users'].map(tab => (
                     <button
@@ -71,13 +98,15 @@ export default function AdminDashboardPage({ token }) {
                         className={`admin-tab ${activeTab === tab ? 'active' : ''}`}
                         onClick={() => setActiveTab(tab)}
                     >
-                        {tab === 'overview' && '📊 '}{tab === 'logs' && '📋 '}{tab === 'users' && '👥 '}
+                        {tab === 'overview' && '📊 '}
+                        {tab === 'logs' && '📋 '}
+                        {tab === 'users' && '👥 '}
                         {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
 
-            {/* Overview Tab */}
+            {/* ── Overview Tab ── */}
             {activeTab === 'overview' && (
                 <>
                     <div className="stats-grid stats-grid-6">
@@ -87,6 +116,8 @@ export default function AdminDashboardPage({ token }) {
                         <div className="stat-card"><div className="stat-label">Blocked</div><div className="stat-value danger">{s.blocked || 0}</div></div>
                         <div className="stat-card"><div className="stat-label">Deepfakes Caught</div><div className="stat-value danger">{s.deepfakes_blocked || 0}</div></div>
                         <div className="stat-card"><div className="stat-label">Total Users</div><div className="stat-value">{s.total_users || 0}</div></div>
+                        <div className="stat-card"><div className="stat-label">Blocked Users</div><div className="stat-value danger">{s.blocked_users || 0}</div></div>
+                        <div className="stat-card"><div className="stat-label">Impossible Travel</div><div className="stat-value warning">{s.suspicious_logins || 0}</div></div>
                     </div>
 
                     <div className="dashboard-grid">
@@ -148,23 +179,24 @@ export default function AdminDashboardPage({ token }) {
                     {/* Recent Suspicious */}
                     {s.recent_suspicious && s.recent_suspicious.length > 0 && (
                         <div className="dashboard-card full-width" style={{ marginBottom: 20 }}>
-                            <div className="card-header">⚠ Recent Suspicious Attempts</div>
+                            <div className="card-header">⚠️ Recent Suspicious Attempts</div>
                             <div className="card-body" style={{ padding: 0 }}>
                                 <table className="logs-table">
                                     <thead>
                                         <tr>
                                             <th>Email</th><th>Location</th><th>Risk</th>
-                                            <th>Decision</th><th>Face AI</th><th>Time</th>
+                                            <th>Decision</th><th>Face AI</th><th>Travel</th><th>Time</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {s.recent_suspicious.map((log, i) => (
-                                            <tr key={i}>
+                                            <tr key={i} className={log.is_suspicious ? 'row-suspicious' : ''}>
                                                 <td style={{ fontWeight: 500 }}>{log.email}</td>
                                                 <td>{log.city}, {log.country}</td>
                                                 <td style={{ fontWeight: 700 }}>{log.total_risk}</td>
                                                 <td><span className={`decision-badge ${log.decision.toLowerCase()}`}>{log.decision}</span></td>
                                                 <td><span className={`face-verdict ${(log.face_verdict || '').toLowerCase()}`}>{log.face_verdict || '—'}</span></td>
+                                                <td>{log.is_suspicious ? <span className="suspicious-travel-badge">⚠️ Travel</span> : '—'}</td>
                                                 <td>{formatTime(log.timestamp)}</td>
                                             </tr>
                                         ))}
@@ -176,7 +208,7 @@ export default function AdminDashboardPage({ token }) {
                 </>
             )}
 
-            {/* Logs Tab */}
+            {/* ── Logs Tab ── */}
             {activeTab === 'logs' && (
                 <div className="dashboard-card full-width">
                     <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -200,12 +232,13 @@ export default function AdminDashboardPage({ token }) {
                                     <tr>
                                         <th>Email</th><th>IP</th><th>Location</th>
                                         <th>Device</th><th>Behavior</th><th>Face</th>
-                                        <th>Total</th><th>Decision</th><th>Face AI</th><th>Time</th>
+                                        <th>Total</th><th>Decision</th><th>Face AI</th>
+                                        <th>Travel</th><th>Time</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredLogs.map((log, i) => (
-                                        <tr key={i}>
+                                        <tr key={i} className={log.is_suspicious ? 'row-suspicious' : ''}>
                                             <td style={{ fontWeight: 500 }}>{log.email}</td>
                                             <td style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{log.ip_address}</td>
                                             <td>{log.city}, {log.country}</td>
@@ -215,6 +248,7 @@ export default function AdminDashboardPage({ token }) {
                                             <td style={{ fontWeight: 700 }}>{log.total_risk}</td>
                                             <td><span className={`decision-badge ${log.decision.toLowerCase()}`}>{log.decision}</span></td>
                                             <td><span className={`face-verdict ${(log.face_verdict || '').toLowerCase()}`}>{log.face_verdict || '—'}</span></td>
+                                            <td>{log.is_suspicious ? <span className="suspicious-travel-badge">⚠️</span> : '—'}</td>
                                             <td>{formatTime(log.timestamp)}</td>
                                         </tr>
                                     ))}
@@ -227,7 +261,7 @@ export default function AdminDashboardPage({ token }) {
                 </div>
             )}
 
-            {/* Users Tab */}
+            {/* ── Users Tab ── */}
             {activeTab === 'users' && (
                 <div className="dashboard-card full-width">
                     <div className="card-header">👥 Registered Users ({users.length})</div>
@@ -236,16 +270,44 @@ export default function AdminDashboardPage({ token }) {
                             <table className="logs-table">
                                 <thead>
                                     <tr>
-                                        <th>ID</th><th>Email</th><th>Role</th>
+                                        <th>Actions</th><th>ID</th><th>Name</th><th>Email</th><th>Role</th>
                                         <th>Location</th><th>Logins</th><th>Face</th>
-                                        <th>Status</th><th>Registered</th><th>Actions</th>
+                                        <th>Status</th><th>Registered</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {users.map(user => (
                                         <tr key={user.id}>
-                                            <td>{user.id}</td>
-                                            <td style={{ fontWeight: 500 }}>{user.email}</td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', minWidth: '240px' }}>
+                                                    <button
+                                                        className="btn-sm btn-outline"
+                                                        onClick={() => handleViewUserLogs(user)}
+                                                    >
+                                                        📋 History
+                                                    </button>
+                                                    {user.role !== 'admin' && (
+                                                        <>
+                                                            <button
+                                                                className={`btn-sm ${user.is_blocked ? 'btn-unblock' : 'btn-block'}`}
+                                                                onClick={() => handleBlockUser(user.id)}
+                                                            >
+                                                                {user.is_blocked ? 'Unblock' : 'Block'}
+                                                            </button>
+                                                            <button
+                                                                className="btn-sm"
+                                                                onClick={() => handleDeleteUser(user)}
+                                                                style={{ backgroundColor: '#dc2626', color: '#ffffff', border: '1px solid #b91c1c', fontWeight: 'bold' }}
+                                                            >
+                                                                🗑️ Delete
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td style={{ fontWeight: 800 }}>{user.id}</td>
+                                            <td style={{ fontWeight: 500 }}>{user.name || '—'}</td>
+                                            <td>{user.email}</td>
                                             <td><span className={`role-badge ${user.role}`}>{user.role}</span></td>
                                             <td>{user.home_city}, {user.home_country}</td>
                                             <td>{user.login_count}</td>
@@ -256,70 +318,53 @@ export default function AdminDashboardPage({ token }) {
                                                 </span>
                                             </td>
                                             <td>{formatTime(user.created_at)}</td>
-                                            <td>
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <button 
-                                                        className="btn-sm btn-outline"
-                                                        onClick={() => setSelectedUserJson(user)}
-                                                    >
-                                                        💎 View JSON
-                                                    </button>
-                                                    {user.role !== 'admin' && (
-                                                        <button
-                                                            className={`btn-sm ${user.is_blocked ? 'btn-unblock' : 'btn-block'}`}
-                                                            onClick={() => handleBlockUser(user.id)}
-                                                        >
-                                                            {user.is_blocked ? 'Unblock' : 'Block'}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         ) : (
-                            <div className="empty-state"><div className="empty-state-icon">👥</div><p>No users registered yet</p></div>
+                            <div className="empty-state"><div className="empty-state-icon">👥</div><p>No users yet</p></div>
                         )}
                     </div>
                 </div>
             )}
-            {/* JSON Modal */}
-            {selectedUserJson && (
-                <div className="otp-modal-overlay" onClick={() => setSelectedUserJson(null)}>
-                    <div className="otp-modal" style={{ maxWidth: '600px', width: '90%' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                            <h3>💎 Unique Face Signature (JSON)</h3>
-                            <button className="btn-close" style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer' }} onClick={() => setSelectedUserJson(null)}>✕</button>
+
+            {/* ── Per-user Login History Modal ── */}
+            {selectedUser && (
+                <div className="otp-modal-overlay" onClick={() => setSelectedUser(null)}>
+                    <div className="otp-modal" style={{ maxWidth: 700, width: '90%', maxHeight: '85vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <h3>📋 Login History — {selectedUser.name || selectedUser.email}</h3>
+                            <button style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer' }} onClick={() => setSelectedUser(null)}>✕</button>
                         </div>
-                        <p style={{ fontSize: '0.9rem', color: '#cbd5e1', marginBottom: '15px' }}>
-                            Encrypted biometric attributes for <strong>{selectedUserJson.email}</strong>. 
-                            Only this unique signature allows secure login.
+                        <p style={{ color: '#94a3b8', fontSize: '0.88rem', marginBottom: 16 }}>
+                            Showing last 30 authentication events for <strong>{selectedUser.email}</strong>
                         </p>
-                        <pre style={{ 
-                            background: '#1e293b', 
-                            color: '#e2e8f0', 
-                            padding: '15px', 
-                            borderRadius: '8px', 
-                            overflowX: 'auto',
-                            fontSize: '0.85rem',
-                            textAlign: 'left',
-                            maxHeight: '300px'
-                        }}>
-                            {JSON.stringify(selectedUserJson.face_attributes, null, 2)}
-                        </pre>
-                        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-primary" onClick={() => {
-                                const blob = new Blob([JSON.stringify(selectedUserJson.face_attributes, null, 2)], { type: 'application/json' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `face_signature_${selectedUserJson.id}.json`;
-                                a.click();
-                            }}>
-                                📥 Download JSON
-                            </button>
-                        </div>
+                        {userLogsLoading ? (
+                            <div style={{ textAlign: 'center', padding: 40 }}><div className="loading-spinner" /></div>
+                        ) : userLogs && userLogs.length > 0 ? (
+                            <table className="logs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Location</th><th>Risk</th><th>Decision</th><th>Face</th><th>Travel</th><th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {userLogs.map((log, i) => (
+                                        <tr key={i} className={log.is_suspicious ? 'row-suspicious' : ''}>
+                                            <td>{log.city}, {log.country}</td>
+                                            <td style={{ fontWeight: 700 }}>{log.total_risk}</td>
+                                            <td><span className={`decision-badge ${log.decision.toLowerCase()}`}>{log.decision}</span></td>
+                                            <td><span className={`face-verdict ${(log.face_verdict || '').toLowerCase()}`}>{log.face_verdict || '—'}</span></td>
+                                            <td>{log.is_suspicious ? <span className="suspicious-travel-badge">⚠️ Travel</span> : '—'}</td>
+                                            <td>{formatTime(log.timestamp)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div className="empty-state"><div className="empty-state-icon">📋</div><p>No login history</p></div>
+                        )}
                     </div>
                 </div>
             )}
@@ -330,8 +375,7 @@ export default function AdminDashboardPage({ token }) {
 function renderDonut(allow, flag, block) {
     const total = allow + flag + block;
     if (total === 0) return null;
-    const r = 56;
-    const cx = 70, cy = 70;
+    const r = 56, cx = 70, cy = 70;
     const circumference = 2 * Math.PI * r;
     const segments = [
         { value: allow, color: '#10b981' },
@@ -352,5 +396,6 @@ function renderDonut(allow, flag, block) {
 function formatTime(ts) {
     if (!ts) return '—';
     const d = new Date(ts);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+        ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }

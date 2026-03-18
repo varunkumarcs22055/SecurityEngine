@@ -2,52 +2,70 @@ import { Link, useLocation } from 'react-router-dom';
 
 export default function Navbar({ isAuth, email, role, onLogout }) {
     const location = useLocation();
-    const path = location.pathname;
     const isAdmin = role === 'admin';
+    const name = localStorage.getItem('name') || email?.split('@')[0] || '';
+    const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+
+    const navLinks = isAdmin
+        ? [{ to: '/admin/dashboard', label: '⚡ Command Center' }]
+        : [
+            { to: '/dashboard', label: '🛡️ Dashboard' },
+            { to: '/detect', label: '🔍 Detect' },
+          ];
 
     return (
-        <nav className={`navbar ${isAdmin ? 'navbar-admin' : ''}`}>
-            <div className="nav-inner">
-                <Link to="/" className="nav-brand">
-                    <div className={`brand-icon ${isAdmin ? 'brand-admin' : ''}`}>
-                        {isAdmin ? '⚡' : 'QS'}
+        <nav className="navbar">
+            <div className="navbar-inner">
+                {/* Brand */}
+                <Link to={isAuth ? (isAdmin ? '/admin/dashboard' : '/dashboard') : '/login'} className="navbar-brand">
+                    <div className="brand-icon">⚛</div>
+                    <div>
+                        <span className="brand-name">QuantumShield</span>
+                        <span className="brand-tag">AI Authentication</span>
                     </div>
-                    <span className="brand-text">
-                        {isAdmin ? 'QuantumShield Admin' : 'QuantumShield'}
-                    </span>
                 </Link>
 
-                <div className="nav-links">
+                {/* Nav Links */}
+                {isAuth && (
+                    <div className="nav-links">
+                        {navLinks.map(link => (
+                            <Link
+                                key={link.to}
+                                to={link.to}
+                                className={`nav-link ${location.pathname === link.to ? 'active' : ''}`}
+                            >
+                                {link.label}
+                            </Link>
+                        ))}
+                    </div>
+                )}
+
+                {/* Right Side */}
+                <div className="nav-right">
                     {isAuth ? (
                         <>
-                            {isAdmin ? (
-                                <Link to="/admin/dashboard" className={`nav-link${path === '/admin/dashboard' ? ' active' : ''}`}>
-                                    🛡️ Admin Panel
-                                </Link>
-                            ) : (
-                                <>
-                                    <Link to="/dashboard" className={`nav-link${path === '/dashboard' ? ' active' : ''}`}>
-                                        Dashboard
-                                    </Link>
-                                    <Link to="/detect" className={`nav-link${path === '/detect' ? ' active' : ''}`}>
-                                        🔍 Detect
-                                    </Link>
-                                </>
-                            )}
-                            <span className="nav-link nav-email" style={{ color: '#9ca3af', cursor: 'default' }}>
-                                {isAdmin && '👑 '}{email}
-                            </span>
-                            <button className="nav-btn-logout" onClick={onLogout}>Logout</button>
+                            <div className="nav-user">
+                                <div className="nav-avatar">{initials}</div>
+                                <div className="nav-user-info">
+                                    <div className="nav-user-name">{name || email}</div>
+                                    <div className={`nav-role-badge ${isAdmin ? 'admin' : 'user'}`}>
+                                        {isAdmin ? '👑 Admin' : '🔵 User'}
+                                    </div>
+                                </div>
+                            </div>
+                            <button className="btn btn-ghost nav-logout" onClick={onLogout}>
+                                Sign Out
+                            </button>
                         </>
                     ) : (
-                        <>
-                            <Link to="/login" className={`nav-link${path === '/login' ? ' active' : ''}`}>
-                                Login
+                        <div className="nav-auth-links">
+                            <Link to="/login" className={`nav-link ${location.pathname === '/login' ? 'active' : ''}`}>
+                                Sign In
                             </Link>
-                            <Link to="/register" className={`nav-link${path === '/register' ? ' active' : ''}`}>
+                            <Link to="/register" className="btn btn-primary btn-sm">
                                 Register
                             </Link>
-                        </>
+                        </div>
                     )}
                 </div>
             </div>

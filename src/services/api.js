@@ -27,51 +27,41 @@ api.interceptors.response.use(
             localStorage.removeItem('token');
             localStorage.removeItem('email');
             localStorage.removeItem('role');
-            // Don't redirect here — let the app handle it
+            localStorage.removeItem('name');
         }
         return Promise.reject(err);
     }
 );
 
-// ─── Auth API ───
+// ─── Auth API ───────────────────────────────────────────────────────────────
 
-export const registerUser = (data) => {
-    return api.post('/api/register', data);
-};
+export const registerUser = (data) => api.post('/api/register', data);
 
-export const loginUser = (data) => {
-    return api.post('/api/login', data);
-};
+export const loginUser = (data) => api.post('/api/login', data);
 
-export const adminLogin = (data) => {
-    return api.post('/api/admin/login', data);
-};
+export const adminLogin = (data) => api.post('/api/admin/login', data);
 
-// ─── User API ───
+// ─── User API ───────────────────────────────────────────────────────────────
 
-export const getUserLogs = (params) => {
-    return api.get('/api/user/logs', { params });
-};
+export const getUserProfile = () => api.get('/api/user/profile');
 
-// ─── Admin API ───
+export const getUserLogs = (params) => api.get('/api/user/logs', { params });
 
-export const getStats = () => {
-    return api.get('/api/admin/stats');
-};
+// ─── Admin API ──────────────────────────────────────────────────────────────
 
-export const getLoginLogs = (params) => {
-    return api.get('/api/admin/logs', { params });
-};
+export const getStats = () => api.get('/api/admin/stats');
 
-export const getUsers = () => {
-    return api.get('/api/admin/users');
-};
+export const getLoginLogs = (params) => api.get('/api/admin/logs', { params });
 
-export const toggleBlockUser = (userId) => {
-    return api.post(`/api/admin/users/${userId}/block`);
-};
+export const getUsers = () => api.get('/api/admin/users');
 
-// ─── Deepfake Detection API ───
+export const toggleBlockUser = (userId) => api.post(`/api/admin/users/${userId}/block`);
+
+export const getUserById = (userId) => api.get(`/api/admin/users/${userId}/logs`);
+
+export const deleteUser = (userId) => api.delete(`/api/admin/users/${userId}`);
+
+// ─── Deepfake Detection API ─────────────────────────────────────────────────
 
 export const detectImage = (file) => {
     const formData = new FormData();
@@ -81,17 +71,14 @@ export const detectImage = (file) => {
     });
 };
 
-export const detectWebcam = (base64Image) => {
-    return api.post('/api/detect/webcam', { image: base64Image });
-};
+export const detectWebcam = (base64Image) =>
+    api.post('/api/detect/webcam', { image: base64Image });
 
-// ─── Health ───
+// ─── Health ─────────────────────────────────────────────────────────────────
 
-export const healthCheck = () => {
-    return api.get('/api/health');
-};
+export const healthCheck = () => api.get('/api/health');
 
-// ─── Utility ───
+// ─── Utility ────────────────────────────────────────────────────────────────
 
 export const collectDeviceInfo = () => ({
     userAgent: navigator.userAgent,
@@ -105,16 +92,8 @@ export const collectDeviceInfo = () => ({
 });
 
 export default {
-    registerUser,
-    loginUser,
-    adminLogin,
-    getUserLogs,
-    getStats,
-    getLoginLogs,
-    getUsers,
-    toggleBlockUser,
-    detectImage,
-    detectWebcam,
-    healthCheck,
-    collectDeviceInfo,
+    registerUser, loginUser, adminLogin,
+    getUserProfile, getUserLogs,
+    getStats, getLoginLogs, getUsers, toggleBlockUser, getUserById, deleteUser,
+    detectImage, detectWebcam, healthCheck, collectDeviceInfo,
 };
